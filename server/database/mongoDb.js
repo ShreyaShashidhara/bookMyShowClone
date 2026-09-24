@@ -3,7 +3,7 @@ import mongoose from "mongoose"
 const connectToDB = async() => {
     try {
         const {connection} = await mongoose.connect(
-             'mongodb+srv://shreyashashidhara26_db_user:Germany8967@cluster0.ddkr8bc.mongodb.net/bookMyShow?appName=Cluster0'
+             'mongodb+srv://shreyashashidhara26_db_user:password@cluster0.ddkr8bc.mongodb.net/bookMyShow?appName=Cluster0'
         )
         if (connection) {
             console.log(`Connected to database: ${connection.host}`);
