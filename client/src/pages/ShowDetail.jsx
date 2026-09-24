@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { jwtToken } from "../constants/authToken";
 import { stripePromise } from "../stripe";
@@ -11,8 +11,19 @@ const ShowPage = () => {
   const [show, setShow] = useState({});
   const [selectedSeats, setSelectedSeats] = useState(1);
   const [clientSecret, setClientSecret] = useState("");
+  const [paymentError, setPaymentError] = useState("");
+  const [isStartingPayment, setIsStartingPayment] = useState(false);
   let [searchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  const getAuthHeaders = () => ({
+    Authorization: `Bearer ${localStorage.getItem("token") || jwtToken}`,
+  });
+
+  const handleUnauthorized = useCallback(() => {
+    localStorage.removeItem("token");
+    navigate("/login");
+  }, [navigate]);
 
   const appearance = {
     theme: "stripe",
@@ -23,35 +34,80 @@ const ShowPage = () => {
   };
 
   const handleBookSeats = () => {
-    // Implement booking logic here
-    // Create PaymentIntent as soon as the page loads
+    const ticketPrice = Number(show.ticketPrice);
+
+    if (!stripePromise) {
+      setPaymentError("Stripe is not configured. Set REACT_APP_STRIPE_PUBLISHABLE_KEY in client/.env");
+      return;
+    }
+
+    if (!Number.isFinite(ticketPrice) || ticketPrice <= 0) {
+      window.alert("Ticket price is unavailable for this show");
+      return;
+    }
+
+    setPaymentError("");
+    setIsStartingPayment(true);
+
     fetch("http://localhost:5010/api/booking/get-payment-secret", {
       method: "POST",
-      headers: { "Content-Type": "application/json", jwttoken: jwtToken },
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({
-        seats: selectedSeats,
-        price: show.ticketPrice,
+        seats: Number(selectedSeats),
+        price: ticketPrice,
         showId,
       }),
     })
-      .then((res) => res.json())
-      .then((data) => setClientSecret(data.clientSecret));
+      .then(async (res) => {
+        const data = await res.json();
+        if (res.status === 401) {
+          handleUnauthorized();
+          return null;
+        }
+        if (!res.ok) {
+          throw new Error(data.message || "Unable to start payment");
+        }
+        if (!data.clientSecret) {
+          throw new Error("The server did not return a Stripe client secret");
+        }
+        return data;
+      })
+      .then((data) => {
+        if (data) {
+          setClientSecret(data.clientSecret);
+        }
+      })
+      .catch((error) => setPaymentError(error.message))
+      .finally(() => setIsStartingPayment(false));
   };
 
   useEffect(() => {
     fetch(`http://localhost:5010/api/show/${showId}`, {
       headers: {
-        jwttoken: jwtToken,
+        ...getAuthHeaders(),
       },
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        const data = await res.json();
+        if (res.status === 401) {
+          handleUnauthorized();
+          return null;
+        }
+        return data;
+      })
       .then((data) => {
+        if (!data) {
+          return;
+        }
         setShow({
           ...data,
           availableSeats: data.totalSeats - data.bookedSeats?.length,
         });
       });
-  }, [showId]);
+  }, [showId, handleUnauthorized]);
 
   useEffect(() => {
     // Call confirm booking API
@@ -61,17 +117,27 @@ const ShowPage = () => {
     if (transactionId) {
       fetch("http://localhost:5010/api/booking/confirm", {
         method: "POST",
-        headers: { "Content-Type": "application/json", jwttoken: jwtToken },
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
         body: JSON.stringify({
           transactionId: searchParams.get("payment_intent"),
         }),
       })
-        .then((res) => res.json())
+        .then(async (res) => {
+          const data = await res.json();
+          if (res.status === 401) {
+            handleUnauthorized();
+            return null;
+          }
+          return data;
+        })
         .then((data) => {
           navigate("/profile/bookings");
         });
     }
-  }, [searchParams, navigate]);
+  }, [searchParams, navigate, handleUnauthorized]);
 
   return (
     <div className="min-h-screen p-4 bg-gray-100">
@@ -121,11 +187,18 @@ const ShowPage = () => {
           </select>
           <button
             onClick={handleBookSeats}
+            disabled={isStartingPayment}
             className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
           >
-            Book Seat
+            {isStartingPayment ? "Loading..." : "Book Seat"}
           </button>
         </div>
+
+        {paymentError && (
+          <p className="mb-4 text-red-600" role="alert">
+            {paymentError}
+          </p>
+        )}
 
         {clientSecret && (
           <Elements

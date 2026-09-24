@@ -1,5 +1,5 @@
 import { loadStripe } from '@stripe/stripe-js';
 
-export const stripePromise = loadStripe(
-  process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_placeholder'
-);
+const publishableKey = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
+
+export const stripePromise = publishableKey ? loadStripe(publishableKey) : null;

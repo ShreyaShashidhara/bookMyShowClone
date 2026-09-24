@@ -27,11 +27,18 @@ const Home = () => {
   useEffect(() => {
     fetch("http://localhost:5010/api/movie", {
       headers: {
-        jwttoken: jwtToken
+        Authorization: `Bearer ${localStorage.getItem('token') || jwtToken}`
       },
     })
-      .then((res) => res.json())
-      .then((data) => setMovies(data));
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || "Unable to load movies");
+        }
+        return data;
+      })
+      .then((data) => setMovies(Array.isArray(data) ? data : []))
+      .catch((error) => console.error(error));
   }, []);
 
   return (

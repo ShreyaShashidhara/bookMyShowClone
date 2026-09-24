@@ -11,6 +11,7 @@ export default function CheckoutForm({ successUrl }) {
 
   const [message, setMessage] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [elementError, setElementError] = useState(null);
 
   useEffect(() => {
     if (!stripe) {
@@ -83,7 +84,12 @@ export default function CheckoutForm({ successUrl }) {
   return (
     <form id="payment-form" onSubmit={handleSubmit}>
 
-      <PaymentElement id="payment-element" options={paymentElementOptions} />
+      <PaymentElement
+        id="payment-element"
+        options={paymentElementOptions}
+        onLoadError={(event) => setElementError(event.error.message)}
+      />
+      {elementError && <div id="payment-message">{elementError}</div>}
       <button disabled={isLoading || !stripe || !elements} id="submit">
         <span id="button-text">
           {isLoading ? <div className="spinner" id="spinner"></div> : "Pay now"}
