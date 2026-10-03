@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { jwtToken } from "../constants/authToken";
 import { stripePromise } from "../stripe";
 import { Elements } from "@stripe/react-stripe-js";
@@ -13,7 +13,6 @@ const ShowPage = () => {
   const [clientSecret, setClientSecret] = useState("");
   const [paymentError, setPaymentError] = useState("");
   const [isStartingPayment, setIsStartingPayment] = useState(false);
-  let [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const getAuthHeaders = () => ({
@@ -109,36 +108,6 @@ const ShowPage = () => {
       });
   }, [showId, handleUnauthorized]);
 
-  useEffect(() => {
-    // Call confirm booking API
-
-    const transactionId = searchParams.get("payment_intent");
-
-    if (transactionId) {
-      fetch("http://localhost:5010/api/booking/confirm", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({
-          transactionId: searchParams.get("payment_intent"),
-        }),
-      })
-        .then(async (res) => {
-          const data = await res.json();
-          if (res.status === 401) {
-            handleUnauthorized();
-            return null;
-          }
-          return data;
-        })
-        .then((data) => {
-          navigate("/profile/bookings");
-        });
-    }
-  }, [searchParams, navigate, handleUnauthorized]);
-
   return (
     <div className="min-h-screen p-4 bg-gray-100">
       <div className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-lg">
@@ -208,7 +177,7 @@ const ShowPage = () => {
             }}
             stripe={stripePromise}
           >
-            <CheckoutForm successUrl={window.location.href} />
+            <CheckoutForm successUrl={`${window.location.origin}/profile/bookings`} />
           </Elements>
         )}
       </div>

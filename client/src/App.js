@@ -14,7 +14,8 @@ import ShowsList from './pages/ShowList';
 import Bookings from './pages/Bookings';
 import Chat from './pages/Chat';
 import io from 'socket.io-client';
-
+import {loadStripe} from '@stripe/stripe-js';
+export const stripePromise = loadStripe("pk_test_51UIRdBD5pfrfcZ4yqlxVrmGi988ugmhCR6HE4WyNbWJ6GCJr9eE6PvEZ4RRj4PmkozMNgQNhnv916irAY4SCSqLw00q26CAzox");
 
 
 export const socket = io('http://localhost:5001');

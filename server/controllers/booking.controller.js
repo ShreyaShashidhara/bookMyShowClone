@@ -1,6 +1,7 @@
 import Booking from "../model/booking.model.js";
+import User from "../model/user.model.js";
 import Stripe from "stripe";
-//import {transporter} from "../index.js";
+import {transporter} from "../index.js";
 
 const getStripeClient = () => {
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY || process.env.stripe_secret_key;
@@ -59,25 +60,60 @@ export const createBooking = async (req, res) => {
     // showId > req.showId
 
     const bookingDetails = req.body;
+    const userId = req.user?.id || req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).send({
+        success: false,
+        message: "User authentication is required to create a booking",
+      });
+    }
+
+    const existingBooking = await Booking.findOne({ transactionId: bookingDetails.transactionId });
+    if (existingBooking) {
+      return res.status(200).send({
+        success: true,
+        message: "Booking already exists for this transaction",
+      });
+    }
 
     const paymentIntent = await stripe.paymentIntents.retrieve(
       bookingDetails.transactionId
     );
+    if (paymentIntent.status !== "succeeded") {
+      return res.status(400).send({
+        success: false,
+        message: "Payment has not succeeded",
+      });
+    }
+
     const booking = new Booking({
       ...bookingDetails,
-      seats: paymentIntent.metadata.seats,
+      user: userId,
+      seats: Number(paymentIntent.metadata.seats),
       show: paymentIntent.metadata.showId,
+      transactionId: bookingDetails.transactionId,
     });
-    booking.user = req.user.id;
     await booking.save();
 
-    const info = await transporter.sendMail({
-        from: '"Chirag Goel" <xyz@gmail.com>', // sender address
-        to: "x@gmail.com, y@gmail.com", // list of receivers
-        subject: "Booking is confirmed", // Subject line
-        text: "Hello world?", // plain text body
-        html: "<b>Hello world?</b>", // html body
-      });
+    if (transporter) {
+      try {
+        const user = await User.findById(userId).select("name email");
+        if (!user?.email) {
+          throw new Error("Booking customer email address was not found");
+        }
+
+        await transporter.sendMail({
+          from: `"BookMyShow" <${process.env.GMAIL_USER}>`,
+          to: user.email,
+          subject: "Booking is confirmed",
+          text: `Hello ${user.name}, your booking is confirmed.\n\nBooking ID: ${booking.id}\nSeats: ${booking.seats}\nTransaction ID: ${booking.transactionId}`,
+          html: `<p>Hello,</p><p>Your booking is confirmed.</p><p><strong>Booking ID:</strong> ${booking.id}<br><strong>Seats:</strong> ${booking.seats}<br><strong>Transaction ID:</strong> ${booking.transactionId}</p>`,
+        });
+      } catch (emailError) {
+        console.error("Booking saved, but confirmation email failed:", emailError.message);
+      }
+    }
 
     res.send({
       success: true,
@@ -85,6 +121,12 @@ export const createBooking = async (req, res) => {
     });
 
   } catch (e) {
+    if (e.code === 11000 && e.keyPattern?.transactionId) {
+      return res.status(200).send({
+        success: true,
+        message: "Booking already exists for this transaction",
+      });
+    }
     console.log(e);
     res.status(500).send({
       success: false,
@@ -102,7 +144,7 @@ export const getBookingDetail = async (req, res) => {
         model: "shows",
         populate: {
           path: "movie",
-          model: "movies",
+          model: "movie",
         },
       })
       .populate({
