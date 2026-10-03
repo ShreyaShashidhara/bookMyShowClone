@@ -50,7 +50,7 @@ app.use((req, res) => {
   res.status(404).send("Page Not Found!");
 });
 
-const PORT = process.env.port || 5010;
+const PORT = process.env.PORT || process.env.port || 5010;
 // app.listen(PORT, () => {
 //     console.log(`Server started at http://localhost:${PORT}`);
 //     connectToDB();
@@ -81,7 +81,10 @@ const startServer = async () => {
     server.listen(PORT, () => {
       console.log(`Server started at http://localhost:${PORT}`);
     });
-  } catch {
+  } catch (error) {
+    if (!(error instanceof Error && error.message.startsWith("MongoDB connection failed:"))) {
+      console.error("Server startup failed:", error instanceof Error ? error.message : error);
+    }
     console.error('Server startup aborted because MongoDB could not be reached.');
     process.exitCode = 1;
   }
